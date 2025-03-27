@@ -1,0 +1,12 @@
+{
+  "name": "art-staking",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/LiveArtx/art-staking.git",
+  "license": "MIT",
+  "scripts": {
+    "test": "forge test --match-path 'test/*.t.sol' --via-ir --rpc-url $ALCHEMY_URL",
+    "coverage:build": "forge coverage --fork-url $ALCHEMY_URL --match-path 'test/*.t.sol' --report lcov --ir-minimum --via-ir",
+    "coverage:view": "genhtml lcov.info --branch-coverage --output-dir coverage && open coverage/index.html"
+  }
+}
