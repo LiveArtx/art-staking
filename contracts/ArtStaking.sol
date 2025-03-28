@@ -9,7 +9,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 interface IArtToken is IERC20 {
     function claimFor(uint256 amount, uint256 amountToClaim, bytes32[] calldata merkleProof, address receiver)
         external;
-     function isTGEActive() external view returns (bool);
 }
 
 contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
@@ -85,13 +84,19 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
      */
     event Staked(
         address indexed tokenHolder, uint256 indexed stakeId, uint256 indexed amount, uint256 duration, uint256 stakedAt
-    );
+    ); 
+
     /**
      * @dev Emitted when a user unstakes ART tokens.
      */
     event Unstaked(
         address indexed tokenHolder, uint256 indexed stakeId, uint256 indexed amount, uint256 duration, uint256 reward
-    );
+    ); 
+    
+    /**
+     * @dev Emitted when a user performs a claim.
+     */
+    event ClaimPerformed(address indexed user, string message);
 
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ INITIALIZER ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
@@ -300,16 +305,20 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
      * @custom:error "Insufficient claimable supply" There are not enough tokens left to claim.
      */
     function _performClaim(address _tokenHolder, uint256 _amount, bytes32[] calldata _merkleProof)
-        private
-        returns (string memory)
+    private
+    returns (string memory)
     {
+        string memory result;
         try artToken.claimFor(_amount, _amount, _merkleProof, _tokenHolder) {
-            return "Success";
+            result = "Success";
         } catch Error(string memory reason) {
-            return reason;
+            result = reason;
         } catch (bytes memory) {
-            return "Transaction failed with unknown error";
+            result = "Transaction failed with unknown error";
         }
+        
+        emit ClaimPerformed(_tokenHolder, result);
+        return result;
     }
 
     /**

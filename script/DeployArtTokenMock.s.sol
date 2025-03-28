@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
-import {ArtTokenMock} from "contracts/mocks/ArtTokenMock.sol";
+import {ArtTokenMock} from "contracts/mock/ArtTokenMock.sol";
 
 //forge script script/DeployArtTokenMock.sol:DeployArtTokenMockScript --rpc-url $RPC_URL --broadcast -vvvv
 
@@ -16,7 +16,12 @@ contract DeployArtTokenMockScript is Script {
         vm.startBroadcast(privateKey);
 
         // Deploy ArtTokenMock with initial supply
-        ArtTokenMock artToken = new ArtTokenMock();
+        string memory _name = "ArtToken";
+        string memory _symbol = "AT";
+        address _lzEndpoint = address(1);
+        address _delegate = deployer;
+        uint256 initialMintAmount = 1000000;
+        ArtTokenMock artToken = new ArtTokenMock(_name, _symbol, _lzEndpoint, _delegate, initialMintAmount);
         
         vm.stopBroadcast();
 
