@@ -22,7 +22,7 @@ contract ArtStakingScript is Script {
         address initialOwner = derivedAddress;
 
         // ArtStaking initialization parameters
-        address artTokenAddress = address(0); // Replace with actual ART token address
+        address artTokenAddress = 0x19AFf110208DE8b5b910FB39656E11db071e8ca8; // OFT testnet
         uint256 stakingEnabledAt = block.timestamp; // Or set specific timestamp
         uint256 threeMonthRewardMultiplier = 0.2e18; // 20% reward
         uint256 sixMonthRewardMultiplier = 0.5e18; // 50% reward

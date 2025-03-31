@@ -1,6 +1,15 @@
 [profile.default]
-src = "contracts"
-out = "out"
+solc-version = '0.8.26'
+src = 'contracts'
+out = 'out'
+cache_path = 'cache/foundry'
+verbosity = 3
+optimizer = true
+optimizer-runs = 10_000
+ast = true
+ffi = true
+build_info = true
+extra_output = ["storageLayout"]
 libs = ["lib"]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
