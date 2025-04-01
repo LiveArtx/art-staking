@@ -41,8 +41,6 @@ contract ArtStakingScript is Script {
             opts
         );
 
-        ArtStaking stakingContract = ArtStaking(proxy);
-
         vm.stopBroadcast();
 
         console.log("ArtStaking proxy deployed at:", address(proxy));
