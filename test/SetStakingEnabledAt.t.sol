@@ -23,13 +23,13 @@ contract ArtToken_Staking_SetStakingEnabledAt is ContractUnderTest {
     function test_should_revert_when_staking_already_started() external {
         uint256 stakingEnabledAt = artStakingContract.stakingEnabledAt();
 
-        vm.warp(stakingEnabledAt + 7 days);
+        vm.warp(stakingEnabledAt + 7 days + 1);
 
         _mintArtToken(user1, stakeAmount);
         
         vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
-        artStakingContract.stake(user1, stakeAmount);
+        artStakingContract.stake(user1, stakeAmount, 0);
         vm.stopPrank();
 
         vm.expectRevert("Staking already started");

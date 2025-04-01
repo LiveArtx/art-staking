@@ -211,18 +211,27 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
      * @dev This function allows a user to stake ART tokens.
      * @param _tokenHolder The address of the user staking the tokens.
      * @param _amount The amount of ART tokens to be staked.
+     * @param _duration The duration (in seconds) for which the tokens will be staked.
+     * @dev If the staking duration is > 0 after TGE, the stake will set to zero. This represents standard staking where the user can unstake at any time.
      */
-    function stake(address _tokenHolder, uint256 _amount) external whenNotPaused {
+    function stake(address _tokenHolder, uint256 _amount, uint256 _duration) external whenNotPaused {
         require(_tokenHolder != address(0), "Invalid token holder");
         require(_amount > 0, "Amount must be greater than zero");
-        require(block.timestamp >= stakingEnabledAt + 7 days, "Staking not enabled");
+        require(block.timestamp >= stakingEnabledAt, "Staking not enabled");
 
         require(artToken.allowance(_tokenHolder, address(this)) >= _amount, "User did not approve the art token");
         require(artToken.balanceOf(_tokenHolder) >= _amount, "User does not have enough art token");
-        require(artToken.transferFrom(_tokenHolder, address(this), _amount), "Transfer failed");
 
         uint256 duration = 0; // Standard staking
+        if(isTGEPeriod()){
+            require(_duration == THREE_MONTHS || _duration == SIX_MONTHS, "Invalid staking duration");
+            duration = _duration;
+        }
+
         _stake(_tokenHolder, _amount, duration);
+
+        require(artToken.transferFrom(_tokenHolder, address(this), _amount), "Transfer failed");
+
     }
 
     /**
@@ -345,7 +354,7 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
      * @param _amount The amount of ART tokens staked in Wei
      * @param _duration The duration (in seconds) of the stake.
      */
-    function calculateArtReward(uint256 _amount, uint256 _duration) public view returns (uint256) {
+    function calculateArtReward(uint256 _amount, uint256 _duration) public view returns (uint256 reward) {
         if (_duration == THREE_MONTHS) {
             return (_amount * threeMonthRewardMultiplier) / MULTIPLIER_SCALE;
         } else if (_duration == SIX_MONTHS) {
@@ -363,12 +372,20 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
     function _stake(address _tokenHolder, uint256 _amount, uint256 _duration) private {
         uint256 stakingId = ++stakeCreationCount;
 
+        // All stakes performed post TGE do not earn financial rewards
+        uint256 reward = 0;
+
+        // Applies a financial reward to stakes performed during the TGE period
+        if(isTGEPeriod() && _duration == THREE_MONTHS || _duration == SIX_MONTHS){
+            reward = calculateArtReward(_amount, _duration);
+        }
+
         StakerDetails memory stakingDetails = StakerDetails({
             amount: _amount,
             id: stakingId,
             stakedAt: block.timestamp,
             stakingDuration: _duration,
-            reward: 0,
+            reward: reward,
             unstaked: false
         });
 
