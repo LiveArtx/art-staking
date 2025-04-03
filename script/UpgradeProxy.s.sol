@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import {Upgrades, Options} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
-//forge script script/UpgradeProxy.s.sol:ERC721CoreUpdateScript --rpc-url $RPC_URL --broadcast -vvvv --via-ir
+//forge script script/UpgradeProxy.s.sol:StakingUpdateScript --rpc-url $RPC_URL --broadcast -vvvv --via-ir
 
-contract ERC721CoreUpdateScript is Script {
-    address deployedProxy = 0xc7d705cF2882752CaC1d2B16D1E96570a8A60856; // Replace with your proxy address
+contract StakingUpdateScript is Script {
+    address deployedProxy = 0xd333BeCfA94EDc49ff08AFfF12ACD3BC2BD50074; // Replace with your proxy address
 
     function setUp() public {}
 

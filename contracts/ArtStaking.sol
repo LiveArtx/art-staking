@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IArtToken is IERC20 {
-    function claimFor(uint256 amount, uint256 amountToClaim, bytes32[] calldata merkleProof, address receiver)
+    function claimFor(uint256 amountToClaim, bytes32[] calldata merkleProof, address receiver)
         external;
 }
 
@@ -196,13 +196,15 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
         require(_duration == THREE_MONTHS || _duration == SIX_MONTHS, "Staking duration must be three or six months");
         require(isTGEPeriod(), "TGE staking only");
 
+        _stake(_tokenHolder, _amount, _duration);
+
+        // Will revert if user has already claimed. Prevents double claim.
         string memory result = _performClaim(_tokenHolder, _amount, _merkleProof);
 
         if (keccak256(bytes(result)) != keccak256(bytes("Success"))) {
             return result; // Stop execution if the claim fails
         }
 
-        _stake(_tokenHolder, _amount, _duration);
         return result; // Success
     }
 
@@ -318,7 +320,7 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
     returns (string memory)
     {
         string memory result;
-        try artToken.claimFor(_amount, _amount, _merkleProof, _tokenHolder) {
+        try artToken.claimFor(_amount, _merkleProof, _tokenHolder) {
             result = "Success";
         } catch Error(string memory reason) {
             result = reason;
