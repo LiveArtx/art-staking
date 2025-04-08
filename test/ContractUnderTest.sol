@@ -58,7 +58,7 @@ abstract contract ContractUnderTest is Test {
         );
 
         _setClaimableSupply(CLAIM_AMOUNT * 3);
-        _enableArtTokenTGE(block.timestamp - 1);
+        _setArtTokenVestingStartTime(block.timestamp - 1);
 
         vm.stopPrank();
     }
@@ -131,9 +131,9 @@ abstract contract ContractUnderTest is Test {
         vm.stopPrank();
     }
 
-    function _enableArtTokenTGE(uint256 _time) internal {
+    function _setArtTokenVestingStartTime(uint256 _time) internal {
         vm.startPrank(deployer);
-        artTokenMock.setTgeEnabledAt(_time);
+        artTokenMock.setVestingStartTime(_time);
         vm.stopPrank();
     }
 
@@ -141,6 +141,11 @@ abstract contract ContractUnderTest is Test {
         vm.startPrank(deployer);
         artStakingContract.setRewardMultipliers(_threeMonthRewardMultiplier, _sixMonthRewardMultiplier);
         vm.stopPrank();
+    }
+
+    function _getArtTokenVestingStartTime() internal returns(uint256) {
+        vm.startPrank(deployer);
+        return artTokenMock.vestingStart();
     }
 }
 

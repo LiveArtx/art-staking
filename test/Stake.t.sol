@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {ContractUnderTest} from "./ContractUnderTest.sol";
 import {ArtStaking} from "contracts/ArtStaking.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "forge-std/console.sol"; 
 
 contract ArtToken_Staking_Stake is ContractUnderTest {
      event Staked(
@@ -154,7 +155,11 @@ contract ArtToken_Staking_Stake is ContractUnderTest {
     }
 
     function test_should_update_contract_balance_when_stake_tokens_successfully() external {
-        vm.warp(block.timestamp + 7 days + 1);
+        _setArtTokenVestingStartTime(block.timestamp);
+        uint256 r = _getArtTokenVestingStartTime();
+        console.log(r);
+
+        vm.warp(block.timestamp + 8 days);
 
         _mintArtToken(user1, stakeAmount);
 

@@ -12,15 +12,15 @@ contract ArtToken_Staking_Getters is ContractUnderTest {
 
     function test_should_return_true_when_checking_if_tge_period_is_active() external {
         vm.startPrank(claimer1);
-        bool isTgePeriodActive = artStakingContract.isTGEPeriod();
-        assertEq(isTgePeriodActive, true);
+        bool isCliffPeriodActive = artStakingContract.isCliffPeriod();
+        assertEq(isCliffPeriodActive, true);
     }
 
     function test_should_return_false_when_checking_if_tge_period_is_active() external {
         vm.warp(block.timestamp + 7 days + 1);
 
         vm.startPrank(claimer1);
-        bool isTgePeriodActive = artStakingContract.isTGEPeriod();
-        assertEq(isTgePeriodActive, false);
+        bool isCliffPeriodActive = artStakingContract.isCliffPeriod();
+        assertEq(isCliffPeriodActive, false);
     }
 }

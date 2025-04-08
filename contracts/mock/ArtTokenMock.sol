@@ -2618,7 +2618,7 @@ interface IERC20Errors {
     error ERC20InvalidReceiver(address receiver);
 
     /**
-     * @dev Indicates a failure with the `spender`'s `allowance`. Used in transfers.
+     * @dev Indicates a failure with the `spender`’s `allowance`. Used in transfers.
      * @param spender Address that may be allowed to operate on tokens without being their owner.
      * @param allowance Amount of tokens a `spender` is allowed to operate with.
      * @param needed Minimum amount required to perform a transfer.
@@ -2677,7 +2677,7 @@ interface IERC721Errors {
     error ERC721InvalidReceiver(address receiver);
 
     /**
-     * @dev Indicates a failure with the `operator`'s approval. Used in transfers.
+     * @dev Indicates a failure with the `operator`’s approval. Used in transfers.
      * @param operator Address that may be allowed to operate on tokens without being their owner.
      * @param tokenId Identifier number of a token.
      */
@@ -2723,7 +2723,7 @@ interface IERC1155Errors {
     error ERC1155InvalidReceiver(address receiver);
 
     /**
-     * @dev Indicates a failure with the `operator`'s approval. Used in transfers.
+     * @dev Indicates a failure with the `operator`’s approval. Used in transfers.
      * @param operator Address that may be allowed to operate on tokens without being their owner.
      * @param owner Address of the current owner of a token.
      */
@@ -4357,25 +4357,17 @@ interface IArtTokenCore {
     /// @notice Number of decimal places for the token
     function DECIMALS() external view returns (uint8);
 
-    /// @notice Duration of the Token Generation Event (TGE)
-    function TGE_DURATION() external view returns (uint256);
+    /// @notice Duration of the cliff period
+    function CLIFF() external view returns (uint256);
 
-    /// @notice Duration of the vesting period after TGE
-    function VESTING_DURATION() external view returns (uint256);
+    /// @notice Percentage of the cliff period
+    function CLIFF_PERCENTAGE() external view returns (uint256);
+
+    /// @notice Duration of the vesting period including the cliff period
+    function DURATION() external view returns (uint256);
 
     /// @notice Maximum supply of ART tokens
     function MAX_SUPPLY() external view returns (uint256);
-
-    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ STRUCTS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
-
-    /// @notice Represents a user's claim status
-    struct Claim {
-        uint256 amount;         // Total allocated amount
-        uint256 claimed;        // Amount already claimed
-        uint256 lastClaimed;    // Timestamp of the last claim
-        uint256 dailyRelease;   // Daily vested amount
-        bool claimedAtTGE;      // Whether TGE claim has been made
-    }
 
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ EVENTS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
@@ -4399,20 +4391,16 @@ interface IArtTokenCore {
     /// @return uint256 The amount of claimable tokens
     function getClaimableSupply() external view returns (uint256);
 
-    /// @notice Retrieves claim details for a specific address
-    /// @param account The address of the user
-    /// @return Claim struct containing claim details
-    function claimDetailsByAccount(address account) external view returns (Claim memory);
+    /// @notice Returns the amount of tokens claimed by a user
+    /// @param user The address of the user
+    /// @return uint256 The amount of tokens claimed
+    function getClaimedAmount(address user) external view returns (uint256);
 
-    /// @notice Checks whether the TGE is currently active
-    /// @return bool True if TGE is active, false otherwise
-    function isTGEActive() external view returns (bool);
-
-    /// @notice Returns the start and end timestamps for TGE and vesting periods
-    /// @return tgeStart Start time of TGE
-    /// @return tgeEnd End time of TGE
-    /// @return vestingEnd End time of the vesting period
-    function claimingPeriods() external view returns (uint256 tgeStart, uint256 tgeEnd, uint256 vestingEnd);
+    /// @notice Returns the claimable amount for a user
+    /// @param user The address of the user
+    /// @param totalAllocation The total token allocation for the user from Merkle tree
+    /// @return uint256 The amount of tokens that can be claimed in the current transaction
+    function getClaimableAmount(address user, uint256 totalAllocation) external returns (uint256);
 }
 
 // node_modules/@layerzerolabs/oapp-evm/contracts/oapp/libs/OAppOptionsType3.sol
@@ -4512,7 +4500,7 @@ abstract contract OAppOptionsType3 is IOAppOptionsType3, Ownable {
 // contracts/ArtTokenCore.sol
 
 /// @title ArtTokenCore - Core logic for ART token vesting and claims
-/// @notice Manages token generation events (TGE), vesting schedules, and claims
+/// @notice Manages claimable tokens with cliff and linear vesting
 /// @dev Uses Merkle proofs for claim verification and fixed-point math for calculations
 abstract contract ArtTokenCore is IArtTokenCore {
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ CONSTANTS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
@@ -4520,11 +4508,14 @@ abstract contract ArtTokenCore is IArtTokenCore {
     /// @notice Number of decimal places for the token
     uint8 public constant DECIMALS = 18;
 
-    /// @notice Duration of the Token Generation Event (TGE)
-    uint256 public constant TGE_DURATION = 7 days;
+    /// @notice Duration of the cliff period
+    uint256 public constant CLIFF = 7 days;
 
-    /// @notice Duration of the vesting period after TGE
-    uint256 public constant VESTING_DURATION = 180 days;
+    /// @notice Percentage of the claimable supply that is available immediately
+    uint256 public constant CLIFF_PERCENTAGE = 25;
+
+    /// @notice Duration of the vesting period including the cliff period
+    uint256 public constant DURATION = 180 days;
 
     /// @notice Maximum supply of ART tokens
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10 ** DECIMALS;
@@ -4534,11 +4525,14 @@ abstract contract ArtTokenCore is IArtTokenCore {
     /// @notice Tracks the amount of tokens claimed by each user
     mapping(address => uint256) internal claimedAmount;
 
-    /// @notice Stores claim details for each user
-    mapping(address => Claim) internal claims;
+    /// @notice Stores whether the user has claimed the initial amount
+     mapping(address => bool) internal initialClaimed;
 
     /// @notice Merkle root used for claim verification
     bytes32 public merkleRoot;
+
+    /// @notice Timestamp when vesting starts (including Cliff period)
+    uint256 public vestingStart;
 
     /// @notice Total amount of tokens available for claims
     uint256 public claimableSupply;
@@ -4546,17 +4540,11 @@ abstract contract ArtTokenCore is IArtTokenCore {
     /// @notice Total amount of tokens burned
     uint256 public totalBurned;
 
-    /// @notice Timestamp when TGE is enabled
-    uint256 public tgeEnabledAt;
-
     /// @notice Number of unique users who have claimed tokens
     uint256 public totalUsersClaimed;
 
     /// @notice Address of the staking contract
     address public stakingContractAddress;
-
-    /// @notice Percentage of tokens claimable at TGE
-    uint256 public tgeClaimPercentage;
 
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ GETTERS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
@@ -4566,87 +4554,121 @@ abstract contract ArtTokenCore is IArtTokenCore {
         return claimableSupply;
     }
 
-    /// @notice Retrieves claim details for a specific address
-    /// @param account The address of the user
-    /// @return Claim struct containing claim details
-    function claimDetailsByAccount(address account) external view returns (Claim memory) {
-        return claims[account];
+    /// @notice Returns the amount of tokens claimed by a user
+    /// @param user The address of the user
+    /// @return uint256 The amount of tokens claimed
+    function getClaimedAmount(address user) external view returns (uint256) {
+        return claimedAmount[user];
     }
 
-    /// @notice Checks whether the TGE is currently active
-    /// @return bool True if TGE is active, false otherwise
-    function isTGEActive() public view returns (bool) {
-        return tgeEnabledAt > 0 && block.timestamp >= tgeEnabledAt && block.timestamp <= tgeEnabledAt + TGE_DURATION;
-    }
-
-    /// @notice Returns the start and end timestamps for TGE and vesting periods
-    /// @return tgeStart Start time of TGE
-    /// @return tgeEnd End time of TGE
-    /// @return vestingEnd End time of the vesting period
-    function claimingPeriods() public view returns (uint256 tgeStart, uint256 tgeEnd, uint256 vestingEnd) {
-        tgeStart = tgeEnabledAt;
-        tgeEnd = tgeStart + TGE_DURATION;
-        vestingEnd = tgeEnd + VESTING_DURATION;
-    }
-
-    /// @notice Calculates the daily release amount during vesting
-    /// @param _allocatedAmount Total allocated tokens for the user
-    /// @param _claimed Amount already claimed by the user
-    /// @return uint256 Amount that can be claimed per day
-    function calculateDailyRelease(uint256 _allocatedAmount, uint256 _claimed) public pure returns (uint256) {
-        uint256 remaining = _allocatedAmount - _claimed;
-        uint256 vestingCliff = 180; // days
-        return FixedPointMathLib.mulDivDown(remaining, 1e18, uint256(vestingCliff) * 1e18);
+    /// @notice Returns the amount of tokens that can be claimed by a user
+    /// @param user The address of the user
+    /// @param totalAllocation The total token allocation for the user from Merkle tree
+    /// @return uint256 The amount of tokens that can be claimed in the current transaction
+    function getClaimableAmount(address user, uint256 totalAllocation) external returns (uint256) {
+        return _calculateClaimable(user, totalAllocation, false);
     }
 
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ HELPER FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
-    /// @notice Verifies a Merkle proof for a claim
-    /// @param claimer Address of the claimant
-    /// @param allocatedAmount Amount allocated to the claimer
-    /// @param merkleProof Proof verifying the claim
-    function verifyMerkleProof(address claimer, uint256 allocatedAmount, bytes32[] calldata merkleProof) internal view {
-        bytes32 leaf = keccak256(abi.encodePacked(claimer, allocatedAmount));
-        require(MerkleProof.verify(merkleProof, merkleRoot, leaf), "Invalid merkle proof");
-    }
+    /// @dev This function calculates how many tokens a user can claim right now
+    /// SIMPLIFIED EXPLANATION:
+    /// This is like a savings account that gradually unlocks your tokens over time:
+    /// 1. Day 1: You get 25% of your tokens immediately
+    /// 2. After 7 days: The remaining 75% starts unlocking gradually over 6 months
+    /// 3. After 180 days: All your tokens are available
+    ///
+    /// Example with 1000 tokens:
+    /// - Immediately: 250 tokens available (25%)
+    /// - Over 173 days: The remaining 750 tokens unlock bit by bit
+    /// - Each day after day 7, about 4.33 tokens become available (750/173, rounded down)
+    /// - At day 180: All 1000 tokens are available (any rounding discrepancy is corrected at the end)
+    function _calculateClaimable(address user, uint256 totalAllocation, bool processClaim) internal returns (uint256) {
+        // Calculate time passed since vesting started
+        uint256 elapsed = block.timestamp - vestingStart;
+        uint256 vested = 0;
 
-    /// @notice Calculates the claimable amount based on vesting schedules
-    /// @param claimer Address of the claimant
-    /// @param allocatedAmount Total allocated tokens for the user
-    /// @return releaseAmount Amount that can be claimed in the current cycle
-    function calculateReleaseAmount(address claimer, uint256 allocatedAmount) internal returns (uint256 releaseAmount) {
-        Claim storage userClaim = claims[claimer];
-
-        // After vesting period, claim all remaining tokens
-        (,, uint256 vestingEnd) = claimingPeriods();
-        if (block.timestamp >= vestingEnd) {
-            return allocatedAmount - userClaim.claimed;
+        // Initial 25% cliff allocation
+        if (!initialClaimed[user]) {
+            vested += (totalAllocation * CLIFF_PERCENTAGE) / 100;
         }
 
-        // During TGE period
-        if (isTGEActive()) {
-            require(!userClaim.claimedAtTGE, "Already claimed TGE amount");
-            uint256 tgeAmount = FixedPointMathLib.mulWadUp(allocatedAmount, formatToE18(tgeClaimPercentage));
-            userClaim.dailyRelease = calculateDailyRelease(allocatedAmount, tgeAmount);
-            return tgeAmount;
+        // Linear vesting calculation for remaining 75% of tokens
+        // Only starts after the 7-day cliff period
+        if (elapsed > CLIFF) {
+            // Calculate how much time has passed since the cliff
+            uint256 vestingElapsed = elapsed - CLIFF;
+            
+            // Cap vesting at maximum duration (173 days of linear vesting)
+            if (vestingElapsed >= (DURATION - CLIFF)) {
+                vestingElapsed = DURATION - CLIFF;
+            }
+
+            // Calculate remaining 75% that vests linearly after the cliff
+            // Example: If totalAllocation = 1000 tokens
+            // - Cliff amount (25%) = 250 tokens (instant)
+            // - Remaining amount (75%) = 750 tokens (linear)
+            uint256 remaining = (totalAllocation * (100 - CLIFF_PERCENTAGE)) / 100;
+
+            // Calculate linear vesting with precise division
+            // mulDivDown performs: (remaining * vestingElapsed) / (DURATION - CLIFF) atomically
+            // This ensures:
+            // 1. No precision loss from separate multiplication and division
+            // 2. No intermediate overflow even with large numbers
+            // 3. Consistent rounding down behavior for partial amounts
+            uint256 linearVested = FixedPointMathLib.mulDivDown(remaining, vestingElapsed, DURATION - CLIFF);
+
+            // Ensure remaining amount at vesting end
+            if (vestingElapsed >= DURATION - CLIFF) {
+                linearVested = remaining;
+            }
+
+            // For subsequent claims (after initial claim), we need to include both:
+            // 1. The cliff amount (25%)
+            // 2. The linearly vested amount (based on time)
+            // Example at 50% through linear vesting:
+            // - If initialClaimed = true: vested = 25% + (75% * 0.5) = 62.5%
+            // - If initialClaimed = false: vested = 25% + (75% * 0.5) = 62.5% (cliff added above)
+            vested = initialClaimed[user] ? 
+                (totalAllocation * CLIFF_PERCENTAGE) / 100 + linearVested : 
+                vested + linearVested;
         }
 
-        // During vesting period
-        require(userClaim.lastClaimed + 1 days <= block.timestamp, "Claim only once per day");
-        if (userClaim.dailyRelease == 0) {
-            userClaim.dailyRelease = calculateDailyRelease(allocatedAmount, userClaim.claimed);
-            return userClaim.dailyRelease;
-        } else {
-            return userClaim.dailyRelease;
-        }
-    }
+        // Track how much the user has already claimed
+        uint256 alreadyClaimed = claimedAmount[user];
+        uint256 claimable = 0;
 
-    /// @notice Formats a percentage value to a fixed-point 18-decimal representation
-    /// @param percentage The percentage value (1-100)
-    /// @return uint256 The percentage scaled to 18 decimals
-    function formatToE18(uint256 percentage) internal pure returns (uint256) {
-        require(percentage >= 1 && percentage <= 100, "Value must be between 1 and 100");
-        return (percentage * 1e18) / 100;
+        // Track initial claim status
+        if (!initialClaimed[user] && processClaim) {
+            initialClaimed[user] = true;
+            totalUsersClaimed++;
+        }
+
+        // Check if there are any unclaimed vested tokens available
+        // vested = total tokens that should be available to the user at this moment
+        // alreadyClaimed = total tokens the user has previously withdrawn
+        // Example:
+        //   Total allocation: 1000 tokens
+        //   Currently vested: 400 tokens (25% cliff + some linear vesting)
+        //   Already claimed: 250 tokens (previous withdrawals)
+        //   Therefore claimable = 400 - 250 = 150 tokens
+        if (vested > alreadyClaimed && block.timestamp <= vestingStart + DURATION) {
+            // Calculate exact number of new tokens available for claiming
+            // This ensures users can only claim the difference between
+            // what's vested and what they've already taken out
+            claimable = vested - alreadyClaimed;
+        } else if (totalAllocation > alreadyClaimed && block.timestamp > vestingStart + DURATION) {
+            // If the user has not claimed all their tokens by the end of the vesting period,
+            // they can claim the remaining tokens
+            claimable = totalAllocation - alreadyClaimed;
+        }
+
+        // If vested <= alreadyClaimed, claimable remains 0
+        // This handles cases where:
+        // 1. User has claimed everything available so far
+        // 2. Not enough time has passed for new tokens to vest
+
+        return claimable;
     }
 }
 
@@ -4877,7 +4899,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      *
      * Emits a {Transfer} event with `to` set to the zero address.
      *
-     * NOTE: This function is not virtual, {_update} should be overridden instead.
+     * NOTE: This function is not virtual, {_update} should be overridden instead
      */
     function _burn(address account, uint256 value) internal {
         if (account == address(0)) {
@@ -7607,20 +7629,20 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
         }
     }
 
-    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ OWNER FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
+     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ OWNER FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
     /**
      * @dev Allows the owner to mint tokens to a specified address.
-     * @param to The address to mint tokens to
-     * @param amount The amount of tokens to mint
+     * @param to The address to mint tokens to.
+     * @param amount The amount of tokens to mint.
      */
     function mint(address to, uint256 amount) public onlyOwner {
         _mint(to, amount);
     }
 
     /**
-     * @dev Sets the claimable supply. Only callable by the owner.
-     * @param amount The new claimable supply amount
+     * @dev Sets the claimable supply of tokens, ensuring it doesn't exceed the cap.
+     * @param amount The new claimable supply amount.
      */
     function setClaimableSupply(uint256 amount) public onlyOwner {
         require(totalSupply() + amount <= cap(), "Claimable supply exceeds cap");
@@ -7629,25 +7651,16 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
     }
 
     /**
-     * @dev Sets the Merkle root. Only callable by the owner.
-     * @param root The new Merkle root to be set
+     * @dev Sets the Merkle root for claim verification.
+     * @param root The Merkle root for claim verification.
      */
     function setMerkleRoot(bytes32 root) external onlyOwner {
         merkleRoot = root;
     }
 
     /**
-     * @dev Sets the timestamp for when TGE (Token Generation Event) is enabled.
-     * @param _tgeEnabledAt The new TGE enabled timestamp in seconds
-     */
-    function setTgeEnabledAt(uint256 _tgeEnabledAt) external onlyOwner {
-        require(totalUsersClaimed == 0, "TGE already enabled");
-        tgeEnabledAt = _tgeEnabledAt;
-    }
-
-    /**
-     * @dev Sets the address of the staking contract. Only callable by the owner.
-     * @param _stakingContract The address of the staking contract
+     * @dev Sets the address of the staking contract for claiming tokens.
+     * @param _stakingContract The address of the staking contract.
      */
     function setStakingContractAddress(address _stakingContract) external onlyOwner {
         require(_stakingContract != address(0), "Invalid staking contract address");
@@ -7655,80 +7668,68 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
     }
 
     /**
-     * @dev Sets the TGE start time. Only callable by the owner.
-     * @param _startTime The new start time for TGE
+     * @dev Sets the start time for the Token Generation Event (TGE).
+     * @param _startTime The new start time for TGE.
      */
-    function setTgeStartTime(uint256 _startTime) public onlyOwner {
-        require(totalUsersClaimed == 0, "TGE already started");
-        tgeEnabledAt = _startTime;
+    function setVestingStartTime(uint256 _startTime) public onlyOwner {
+        require(totalUsersClaimed == 0, "Vesting already started");
+        vestingStart = _startTime;
     }
 
-    /**
-     * @dev Sets the percentage of tokens to be claimed during TGE. Only callable by the owner.
-     * @param _percentage The percentage of tokens to claim (1-100)
-     */
-    function setTgeClaimPercentage(uint256 _percentage) public onlyOwner {
-        require(totalUsersClaimed == 0, "TGE already enabled");
-        require(_percentage >= 1 && _percentage <= 100, "Value must be between 1 and 100");
-        tgeClaimPercentage = _percentage;
-    }
+    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ CLAIM FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
-    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ CLAIM FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
+   /// @notice Allows users to claim their tokens based on vesting and Merkle proof
+    /// @param totalAllocation Total allocated amount (as in the Merkle tree)
+    /// @param merkleProof Merkle proof validating the user's allocation
+    function claim(uint256 totalAllocation, bytes32[] calldata merkleProof) external {
+        require(block.timestamp >= vestingStart, "Vesting has not started");
 
-    /**
-     * @dev Allows eligible users to claim their allocated tokens. Verifies eligibility using Merkle proof
-     *      and processes the claim based on the current TGE or vesting period.
-     * @param allocatedAmount The total number of tokens allocated to the user
-     * @param merkleProof The Merkle proof array for verifying user eligibility
-     */
-    function claim(uint256 allocatedAmount, bytes32[] calldata merkleProof) public {
-        require(tgeEnabledAt != 0, "TGE not enabled");
+        // Verify Merkle proof
+        bytes32 leaf = keccak256(abi.encodePacked(msg.sender, totalAllocation));
+        require(MerkleProof.verify(merkleProof, merkleRoot, leaf), "Invalid Merkle proof");
 
-        verifyMerkleProof(_msgSender(), allocatedAmount, merkleProof);
-        uint256 releaseAmount = calculateReleaseAmount(_msgSender(), allocatedAmount);
+        uint256 claimable = _calculateClaimable(msg.sender, totalAllocation, true);
+        require(claimable > 0, "Nothing to claim");
 
-        assert((claims[_msgSender()].claimed + releaseAmount) <= allocatedAmount);
+        claimedAmount[msg.sender] += claimable;
 
-        // Update total users claimed if the user has not claimed yet
-        if (claims[_msgSender()].claimed == 0) {
-            claims[_msgSender()].amount = allocatedAmount;
-            totalUsersClaimed++;
-        }
-
-        _processClaim(_msgSender(), releaseAmount);
+        _mint(msg.sender, claimable);
+        emit TokensClaimed(msg.sender, claimable);
     }
 
     /**
      * @dev Allows the staking contract to claim tokens on behalf of a user.
-     * @param allocatedAmount The total number of tokens allocated to the user
-     * @param merkleProof The Merkle proof array for verifying user eligibility
-     * @param receiver The address receiving the claimed tokens
+     * @param allocatedAmount The total number of tokens allocated to the user.
+     * @param merkleProof The Merkle proof array for verifying user eligibility.
+     * @param receiver The address receiving the claimed tokens.
      */
-    function claimFor(uint256 allocatedAmount, uint256 amountToClaim, bytes32[] calldata merkleProof, address receiver)
+    function claimFor(uint256 allocatedAmount, bytes32[] calldata merkleProof, address receiver)
         external
     {
-        require(tgeEnabledAt != 0, "TGE not enabled");
-        require(stakingContractAddress != address(0), "Staking contract not set");
+        require(block.timestamp >= vestingStart, "Vesting has not started");
         require(_msgSender() == stakingContractAddress, "Invalid staking contract address");
 
-        // Create leaf node with total allocation amount using the receiver's address
         bytes32 leaf = keccak256(abi.encodePacked(receiver, allocatedAmount));
 
         require(MerkleProof.verify(merkleProof, merkleRoot, leaf), "Invalid merkle proof");
-        require(claims[receiver].claimed == 0, "Already claimed full allocation");
-        require(amountToClaim <= claimableSupply, "Insufficient claimable supply");
+        require(claimedAmount[receiver] == 0, "User already claimed");
 
-        claims[receiver].amount = allocatedAmount;
+        claimedAmount[receiver] = allocatedAmount;
+        initialClaimed[receiver] = true;
+        
         totalUsersClaimed++;
 
-        _processClaim(receiver, amountToClaim);
+        // Minted to staking contract address as this reduces additional 
+        // steps to approve and transfer the tokens within the staking phase
+        _mint(stakingContractAddress, allocatedAmount);
+        emit TokensClaimed(receiver, allocatedAmount);
     }
 
-    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ BURN FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
+    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ BURN FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
     /**
-     * @dev Burns tokens from the caller's account
-     * @param amount The amount of tokens to burn
+     * @dev Burns tokens from the caller's account.
+     * @param amount The amount of tokens to burn.
      */
     function burn(uint256 amount) public virtual {
         _burn(_msgSender(), amount);
@@ -7736,9 +7737,9 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
     }
 
     /**
-     * @dev Burns tokens from a specified account
-     * @param account The address from which to burn tokens
-     * @param amount The amount of tokens to burn
+     * @dev Burns tokens from a specified account.
+     * @param account The address from which to burn tokens.
+     * @param amount The amount of tokens to burn.
      */
     function burnFrom(address account, uint256 amount) public virtual {
         _spendAllowance(account, _msgSender(), amount);
@@ -7746,31 +7747,7 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
         totalBurned += amount;
     }
 
-    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ INTERNAL FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
-
-    /**
-     * @dev Processes the user's claim and transfers the tokens.
-     * @param claimer The address of the user claiming tokens
-     * @param releaseAmount The number of tokens to release
-     */
-    function _processClaim(address claimer, uint256 releaseAmount) private {
-        Claim storage userClaim = claims[claimer];
-        
-        require(releaseAmount <= claimableSupply, "Insufficient claimable supply");
-        
-        if (isTGEActive()) {
-            userClaim.claimedAtTGE = true;
-        }
-
-        userClaim.claimed += releaseAmount;
-        userClaim.lastClaimed = block.timestamp;
-        claimableSupply -= releaseAmount;
-        _mint(claimer, releaseAmount);
-        
-        emit TokensClaimed(claimer, releaseAmount);
-    }
-
-    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ OVERRIDES ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
+    /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ OVERRIDES ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
     /**
      * @dev Overrides the ERC20 _update function to add custom behavior for capped token transfers.
@@ -7795,7 +7772,7 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
 
     /**
      * @dev Returns the decimals used by the token. Overridden from ERC20.
-     * @return The number of decimals for the token
+     * @return The number of decimals for the token.
      */
     function decimals() public pure override returns (uint8) {
         return DECIMALS;
@@ -7803,7 +7780,7 @@ contract ArtTokenMock is ArtTokenCore, OFT, ERC20Capped, ERC20Permit, Ownable2St
 
     /**
      * @dev Returns the cap of the token. Overridden from ERC20Capped.
-     * @return The maximum supply of tokens, excluding burned tokens
+     * @return The maximum supply of tokens, excluding burned tokens.
      */
     function cap() public view virtual override(ERC20Capped) returns (uint256) {
         return MAX_SUPPLY - totalBurned;

@@ -7,6 +7,8 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IArtToken is IERC20 {
+    function CLIFF() external view returns (uint256);
+    function vestingStart() external view returns (uint256);
     function claimFor(uint256 amountToClaim, bytes32[] calldata merkleProof, address receiver)
         external;
 }
@@ -118,9 +120,12 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
         __Ownable_init(_msgSender());
         __Pausable_init();
         artToken = IArtToken(_artTokenAddress);
-        stakingEnabledAt = _stakingEnabledAt;
         threeMonthRewardMultiplier = _threeMonthRewardMultiplier;
         sixMonthRewardMultiplier = _sixMonthRewardMultiplier;
+
+        if(_stakingEnabledAt > 0){
+            stakingEnabledAt = _stakingEnabledAt;
+        }
     }
 
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ OWNER FUNCTIONS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
@@ -194,7 +199,7 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
         require(_tokenHolder != address(0), "Invalid token holder");
         require(_amount > 0, "Amount must be greater than zero");
         require(_duration == THREE_MONTHS || _duration == SIX_MONTHS, "Staking duration must be three or six months");
-        require(isTGEPeriod(), "TGE staking only");
+        require(isCliffPeriod(), "Staking during cliff only");
 
         _stake(_tokenHolder, _amount, _duration);
 
@@ -214,7 +219,8 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
      * @param _tokenHolder The address of the user staking the tokens.
      * @param _amount The amount of ART tokens to be staked.
      * @param _duration The duration (in seconds) for which the tokens will be staked.
-     * @dev If the staking duration is > 0 after TGE, the stake will set to zero. This represents standard staking where the user can unstake at any time.
+     * @dev If the staking duration is > 0 after vesting cliff ends then the stake will set to zero. 
+     * This represents standard staking where the user can unstake at any time.
      */
     function stake(address _tokenHolder, uint256 _amount, uint256 _duration) external whenNotPaused {
         require(_tokenHolder != address(0), "Invalid token holder");
@@ -225,7 +231,7 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
         require(artToken.balanceOf(_tokenHolder) >= _amount, "User does not have enough art token");
 
         uint256 duration = 0; // Standard staking
-        if(isTGEPeriod()){
+        if(isCliffPeriod()){
             require(_duration == THREE_MONTHS || _duration == SIX_MONTHS, "Invalid staking duration");
             duration = _duration;
         }
@@ -270,11 +276,14 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ HELPERS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
 
     /**
-     * @notice Determines if the current period is the TGE period.
-     * @dev The TGE period is the first 7 days after `stakingEnabledAt`.
+     * @notice Determines if the current period is within the cliff period.
+     * @dev The cliff period is the first 7 days after the Art token `vestingStart` time.
      */
-    function isTGEPeriod() public view returns (bool) {
-        return (block.timestamp >= stakingEnabledAt && block.timestamp <= stakingEnabledAt + 7 days);
+    function isCliffPeriod() public view returns (bool) {
+        uint256 vestingStart = artToken.vestingStart();
+        uint256 vestingCliff = artToken.CLIFF();
+        uint256 cliffEnd = vestingStart + vestingCliff;
+        return (block.timestamp >= vestingStart && block.timestamp <= cliffEnd);
     }
 
     /* ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ GETTERS ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ */
@@ -374,11 +383,10 @@ contract ArtStaking is OwnableUpgradeable, PausableUpgradeable {
     function _stake(address _tokenHolder, uint256 _amount, uint256 _duration) private {
         uint256 stakingId = ++stakeCreationCount;
 
-        // All stakes performed post TGE do not earn financial rewards
         uint256 reward = 0;
 
-        // Applies a financial reward to stakes performed during the TGE period
-        if(isTGEPeriod() && _duration == THREE_MONTHS || _duration == SIX_MONTHS){
+        // Applies a financial reward to stakes performed during the cliff period
+        if(isCliffPeriod() && _duration == THREE_MONTHS || _duration == SIX_MONTHS){
             reward = calculateArtReward(_amount, _duration);
         }
 
