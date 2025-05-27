@@ -1,169 +1,250 @@
 # Art Token Staking Protocol
 
-A decentralized staking protocol for Art Tokens (ART) built on Base network. This protocol enables users to stake their ART tokens based on merkle-verified allocations, ensuring secure and verifiable distribution of staking privileges.
+A decentralized staking protocol for Art Tokens (ART). This protocol enables users to stake their ART tokens with a cooldown period and emergency withdrawal capabilities. Note that this is not an on-chain financial staking protocol - rewards and incentives are managed off-chain using on-chain event data.
 
-## Key Features
-- 🌳 Merkle-based proof verification for staking eligibility
-- 🔒 Secure token staking mechanism
-- 🪙 Compatible with ART token (which has LayerZero cross-chain capabilities)
-- 🔄 Upgradeable smart contract architecture
-- 📊 External source-driven allocation system
-- ⚡ Gas-optimized operations
+## Important Note on Rewards
+- This protocol focuses on token staking mechanics without on-chain rewards
+- All rewards and incentives are managed off-chain
+- The contract emits events for all staking actions, which can be used to:
+  - Track user participation
+  - Calculate off-chain rewards
+  - Monitor staking activity
+  - Generate analytics
+- Users should refer to off-chain documentation for reward distribution details
 
-## Protocol Overview
+## User Features
 
-The Art Token Staking Protocol implements a merkle-based verification system where:
-1. **ArtStaking Contract**: Manages stake deposits and withdrawals, requiring valid merkle proofs for interactions
-2. **Merkle Root Updates**: External source provides allocation data, which is processed into a merkle root and set on-chain
-3. **User Interactions**: Users must provide valid merkle proofs matching the current root to stake their allocated amounts
+The Art Token Staking Protocol offers a flexible and user-friendly staking experience:
 
-### Merkle Verification System
+### Staking Flexibility
+- **Unlimited Staking**: Users can stake as many times as they want, with no restrictions on frequency or number of stakes
+- **Flexible Amounts**: Stake any amount of ART tokens (subject to your token balance)
+- **Multiple Positions**: Create and manage multiple stake positions simultaneously
+- **Independent Stakes**: Each stake operates independently with its own cooldown period
 
-#### How it Works
-1. External source determines staking allocations for eligible addresses
-2. Allocations are processed into a merkle tree, with the root stored on-chain
-3. Users can claim via LiveArt dapp (generates merkle proofs) or directly via the contract
-4. When interacting with the contract, users must provide:
-   - Their intended staking amount
-   - A valid merkle proof verifying their allocation
+### User Actions
+- **Stake**: Deposit ART tokens at any time to create a new stake position
+- **Unstake**: Initiate the unstaking process for any of your stake positions
+- **Withdraw**: After the cooldown period, withdraw your unstaked tokens
+- **Emergency Withdraw**: In case of contract pause, immediately withdraw tokens from any stake position
+- **Track Positions**: View all your active stakes, including:
+  - Stake amounts
+  - Staking dates
+  - Unstaking status
+  - Withdrawal availability
+  - Total staked balance
 
-#### Claim Process Example
-- Claim Amount: 1,000 ART tokens (1000 * 10^18) per valid allocation
-- Each claim must be accompanied by a valid merkle proof
-- Proofs are verified against the current on-chain merkle root
+### Cooldown System
+- 7-day cooldown period after unstaking before tokens can be withdrawn
+- Each stake's cooldown period is tracked independently
+- Emergency withdrawal bypasses cooldown when contract is paused
 
-### Technical Integration
+## Overview
 
+The Art Token Staking Protocol is a secure and flexible staking solution that allows users to:
+- Stake ART tokens with a configurable cooldown period
+- Unstake tokens after the cooldown period
+- Withdraw tokens after unstaking
+- Emergency withdraw tokens when the contract is paused
+- Track total staked amounts and individual stake positions
+
+## Contract Architecture
+
+### ArtStaking Contract
+
+The main staking contract that implements the following features:
+
+#### State Variables
+- `token`: The ART token contract address
+- `cooldownPeriod`: Time period required before unstaking (default: 7 days)
+- `_nextStakeId`: Counter for generating unique stake IDs
+- `_stakes`: Mapping of user addresses to their stake information
+
+#### Stake Information Structure
 ```solidity
-function stakeAndClaim(
-    address _tokenHolder, 
-    uint256 _amount, 
-    uint256 _duration, 
-    bytes32[] calldata _merkleProof
-) external {
-    // User must provide valid proof matching current merkle root
+struct StakeInfo {
+    uint256 stakeId;        // Unique identifier for the stake
+    uint256 amount;         // Amount of tokens staked
+    uint256 startTimestamp; // When the stake was created
+    uint256 unstakeTimestamp; // When unstaking was initiated
+    uint256 releaseTimestamp; // When tokens can be withdrawn
+    bool withdrawn;         // Whether tokens have been withdrawn
 }
 ```
 
-```solidity
-function stake(
-    address _tokenHolder,
-    uint256 _amount
-) external {
-    // User must provide valid proof matching current merkle root
-}
+### Core Functions
+
+#### Staking
+- `stake(uint256 amount)`: Stake ART tokens
+  - Requires token approval
+  - Transfers tokens from user to contract
+  - Creates new stake with unique ID
+  - Emits `Staked` event
+
+#### Unstaking
+- `unstake(uint256 stakeId)`: Initiate unstaking process
+  - Verifies stake exists and belongs to caller
+  - Checks stake hasn't been withdrawn
+  - Sets unstake timestamp
+  - Emits `Unstaked` event
+
+#### Withdrawal
+- `withdraw(uint256 stakeId)`: Withdraw unstaked tokens
+  - Verifies unstaking cooldown period has passed
+  - Transfers tokens back to user
+  - Marks stake as withdrawn
+  - Emits `Withdrawn` event
+
+#### Emergency Withdrawal
+- `emergencyWithdraw(uint256 stakeId)`: Emergency token withdrawal
+  - Only available when contract is paused
+  - Bypasses normal unstaking cooldown
+  - Transfers tokens back to user
+  - Marks stake as withdrawn
+  - Emits `EmergencyWithdrawn` event
+
+#### Admin Functions
+- `initialize(address _token)`: Initialize contract with token address
+- `setCooldownPeriod(uint256 _cooldownPeriod)`: Update cooldown period
+- `pause()`: Pause contract operations
+- `unpause()`: Resume contract operations
+
+### Events
+- `Staked(address indexed user, uint256 indexed stakeId, uint256 amount)`
+- `Unstaked(address indexed user, uint256 indexed stakeId)`
+- `Withdrawn(address indexed user, uint256 indexed stakeId)`
+- `EmergencyWithdrawn(address indexed user, uint256 indexed stakeId)`
+- `CooldownPeriodUpdated(uint256 oldPeriod, uint256 newPeriod)`
+
+## Testing
+
+The protocol includes comprehensive test coverage using Foundry. Tests are organized into the following categories:
+
+### Test Files
+- `Initialize.t.sol`: Contract initialization tests
+- `Stake.t.sol`: Staking functionality tests
+- `Unstake.t.sol`: Unstaking process tests
+- `Withdraw.t.sol`: Token withdrawal tests
+- `EmergencyWithdraw.t.sol`: Emergency withdrawal tests
+- `CooldownPeriod.t.sol`: Cooldown period management tests
+- `Pause.t.sol`: Contract pause functionality tests
+- `TotalStaked.t.sol`: Total staked amount tracking tests
+
+### Running Tests
+```bash
+# Run all tests
+forge test
+
+# Run specific test file
+forge test --match-path test/Stake.t.sol
+
+# Run with verbose output
+forge test -vvv
+
+# Run with gas reporting
+forge test --gas-report
 ```
 
-The Art Token Staking Protocol consists of two main components:
-1. **ArtStaking Contract**: Manages stake deposits, withdrawals, and reward distribution
-2. **Art Token Integration**: Compatible with the ART token, which independently implements cross-chain functionality via LayerZero
+## Development Setup
 
-Users can stake their ART tokens to earn rewards, with a claim amount of 1,000 ART tokens (1000 * 10^18) per distribution. The staking protocol itself operates on Base network, while the ART token it accepts has cross-chain capabilities through LayerZero endpoints.
+### Prerequisites
+- Foundry (forge, cast, anvil)
+- Node.js and yarn
+- Base network RPC URL
 
-## Foundry
-
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
-
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
-
-## Environment Setup
-
-### Option 1: Using .env File
-Create a `.env` file in the root directory:
+### Environment Setup
+1. Create a `.env` file:
 ```env
 RPC_URL=https://base-mainnet.g.alchemy.com/v2/your-api-key
 PRIVATE_KEY=your-private-key
 ETHERSCAN_API_KEY=your-etherscan-key
 ```
 
-### Option 2: Direct Terminal Export
-If you encounter issues with the .env file not being read properly, export the variables directly in your terminal:
-
+2. Install dependencies:
 ```bash
-# For Linux/MacOS
-export RPC_URL="https://base-mainnet.g.alchemy.com/v2/your-api-key"
-export PRIVATE_KEY="your-private-key"
-export ETHERSCAN_API_KEY="your-etherscan-key"
-
-# For Windows (PowerShell)
-$env:RPC_URL="https://base-mainnet.g.alchemy.com/v2/your-api-key"
-$env:PRIVATE_KEY="your-private-key"
-$env:ETHERSCAN_API_KEY="your-etherscan-key"
+forge install
+yarn install
 ```
 
-### Verify Environment Setup
-You can verify your environment variables are set correctly:
-
+### Compilation
 ```bash
-# Linux/MacOS
-echo $RPC_URL
-
-# Windows (PowerShell)
-echo $env:RPC_URL
+forge build
 ```
 
-### Common Issues
-- If you see `RPC URL not found` errors, ensure your environment variables are properly exported
-- For CI/CD environments, make sure to set these variables in your pipeline configuration
-- Remember to never commit your `.env` file or share sensitive keys
+### Deployment
+```bash
+# Deploy to Base mainnet
+forge script script/DeployArtTokenMock.s.sol:DeployArtTokenMockScript --rpc-url $RPC_URL --broadcast -vvvv
+
+# Deploy to Base Sepolia testnet
+forge script script/DeployArtTokenMock.s.sol:DeployArtTokenMockScript --rpc-url $RPC_URL --broadcast -vvvv
+```
+
+## Security Considerations
+
+### Access Control
+- Contract uses OpenZeppelin's `Ownable` for admin functions
+- Critical functions are protected by `onlyOwner` modifier
+- Emergency withdrawal only available when contract is paused
+
+### State Transitions
+- Staking: Requires token approval and sufficient balance
+- Unstaking: Requires ownership of stake and not withdrawn
+- Withdrawal: Requires completed cooldown period
+- Emergency withdrawal: Requires contract to be paused
+
+### Important Validations
+- Token address cannot be zero
+- Stake amounts must be greater than zero
+- Cooldown period must be reasonable
+- Stake ownership is verified for all operations
+
+## Testing Considerations
+
+### Key Test Scenarios
+1. Contract Initialization
+   - Token address setting
+   - Cooldown period initialization
+   - Owner assignment
+
+2. Staking Operations
+   - Successful staking
+   - Insufficient balance
+   - Insufficient allowance
+   - Zero amount staking
+
+3. Unstaking Process
+   - Successful unstaking
+   - Unstaking non-existent stake
+   - Unstaking others' stake
+   - Unstaking already withdrawn stake
+
+4. Withdrawal Process
+   - Successful withdrawal
+   - Early withdrawal attempt
+   - Withdrawal of non-existent stake
+   - Withdrawal of others' stake
+
+5. Emergency Withdrawal
+   - Successful emergency withdrawal
+   - Emergency withdrawal when not paused
+   - Emergency withdrawal of non-existent stake
+
+### Edge Cases
+- Multiple stakes per user
+- Maximum stake amounts
+- Minimum stake amounts
+- Cooldown period boundaries
+- Contract pause/unpause transitions
+
+### Access Control Testing
+- Owner-only functions
+- Unauthorized access attempts
+- Ownership transfer
+- Pause/unpause restrictions
+
+### State Management Testing
+- Stake tracking accuracy
+- Total staked amount calculations
+- Cooldown period updates
+- Withdrawal state transitions
