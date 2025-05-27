@@ -7,189 +7,243 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {VmSafe} from "lib/forge-std/src/Vm.sol";
 
 contract ArtToken_Staking_Unstake is ContractUnderTest {
-    uint256 stakeAmount = 1000 * 10 ** 18;
-    uint256 threeMonths;
-    uint256 sixMonths;
     event Unstaked(
-        address indexed tokenHolder, uint256 indexed stakeId, uint256 indexed amount, uint256 duration, uint256 reward
+        address indexed user,
+        uint256 indexed index
     );
+
+    event Withdrawn(
+        address indexed user,
+        uint256 indexed index
+    );
+
+    uint256 stakeAmount = 1000 * 10 ** 18;
 
     function setUp() public virtual override {
         ContractUnderTest.setUp();
         _initializeArtStakingContract();
-        threeMonths = artStakingContract.THREE_MONTHS();
-        sixMonths = artStakingContract.SIX_MONTHS();
     }
 
     function test_should_revert_when_contract_is_paused() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        vm.stopPrank();
+
         _pause();
 
         vm.startPrank(user1);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        artStakingContract.unstake(1);
+        artStakingContract.unstake(0);
     }
 
-    function test_should_revert_when_user_already_unstaked() external {
-        // open standard staking
-        vm.warp(block.timestamp + 7 days + 1);
+    function test_should_revert_when_stake_does_not_exist() external {
+        vm.expectRevert("Stake does not exist");
+        artStakingContract.unstake(0);
+    }
 
+    function test_should_revert_when_already_unstaking() external {
         _mintArtToken(user1, stakeAmount);
 
         vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        artStakingContract.unstake(0);
 
-        artStakingContract.stake(user1, stakeAmount, 0);
-
-        ArtStaking.StakerDetails memory stakerDetails = artStakingContract.getStakeDetails(user1, 1);
-
-        // First unstake should succeed
-        vm.expectEmit(true, true, true, true);
-        emit Unstaked(user1, 1, stakeAmount, stakerDetails.stakingDuration, 0);
-
-        artStakingContract.unstake(1);
-
-        // Second unstake should revert
-        vm.expectRevert("Already unstaked");
-        artStakingContract.unstake(1);
+        vm.expectRevert("Already unstaking");
+        artStakingContract.unstake(0);
     }
 
-    function test_should_update_unstake_status_when_unstake_is_called() external {
-        vm.warp(block.timestamp + 7 days + 1);
-
+    function test_should_revert_when_already_withdrawn() external {
         _mintArtToken(user1, stakeAmount);
 
         vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        artStakingContract.unstake(0);
 
-        artStakingContract.stake(user1, stakeAmount, 0);
-        artStakingContract.unstake(1);
-        vm.stopPrank();
+        // Fast forward past cooldown period
+        vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
+        artStakingContract.withdraw(0);
 
-        ArtStaking.StakerDetails memory stakerDetails = artStakingContract.getStakeDetails(user1, 1);
-        assertEq(stakerDetails.unstaked, true);
+        vm.expectRevert("Already unstaking");
+        artStakingContract.unstake(0);
     }
 
-    function test_should_revert_when_stake_is_not_matured() external {
-        _mintArtToken(claimer1, stakeAmount);
+    function test_should_update_unstake_timestamp_when_unstaking() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
-        _setStakingContractAddress(address(artStakingContract));
-        _setClaimableSupply(stakeAmount);
+        artStakingContract.stake(stakeAmount);
 
-        (, bytes32[] memory merkleProof) = _claimerDetails();
+        // Verify stake info before unstaking
+        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes.length, 1);
+        assertEq(stakes[0].stakeId, 0);
+        assertEq(stakes[0].amount, stakeAmount);
+        assertEq(stakes[0].unstakeTimestamp, 0);
+        assertEq(stakes[0].releaseTimestamp, 0);
+        assertEq(stakes[0].withdrawn, false);
 
-        vm.startPrank(claimer1);
-        artStakingContract.claimAndStake(claimer1, stakeAmount, threeMonths, merkleProof);
+        artStakingContract.unstake(0);
 
-        vm.expectRevert("Stake has not matured");
-        artStakingContract.unstake(1);
+        // Verify stake info after unstaking
+        stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes.length, 1);
+        assertEq(stakes[0].stakeId, 0);
+        assertEq(stakes[0].unstakeTimestamp, block.timestamp);
+        assertEq(stakes[0].releaseTimestamp, block.timestamp + artStakingContract.cooldownPeriod());
     }
 
-    function test_should_update_rewards_when_three_month_stake_is_unstaked() external {
-        _mintArtToken(claimer1, stakeAmount);
-        _setStakingContractAddress(address(artStakingContract));
+    function test_should_emit_unstaked_event() external {
+        _mintArtToken(user1, stakeAmount);
 
-        (, bytes32[] memory merkleProof) = _claimerDetails();
-
-        vm.startPrank(claimer1);
+        vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
-        artStakingContract.claimAndStake(claimer1, stakeAmount, threeMonths, merkleProof);
-        vm.stopPrank();
+        artStakingContract.stake(stakeAmount);
 
-        uint256 stakedAt = artStakingContract.getStakeDetails(claimer1, 1).stakedAt;
-        vm.warp(stakedAt + threeMonths);
+        vm.expectEmit(true, true, false, false);
+        emit Unstaked(user1, 0);
+        artStakingContract.unstake(0);
+    }
 
-        // Calculate expected reward before unstaking
-        uint256 expectedReward = artStakingContract.calculateArtReward(stakeAmount, threeMonths);
+    function test_should_revert_when_withdrawing_before_cooldown() external {
+        _mintArtToken(user1, stakeAmount);
 
-        // Need to mint both the original stake amount AND the reward amount to the contract
-        _mintArtToken(address(artStakingContract), stakeAmount + expectedReward);
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        artStakingContract.unstake(0);
+
+        vm.expectRevert("Cooldown not complete");
+        artStakingContract.withdraw(0);
+    }
+
+    function test_should_revert_when_withdrawing_not_unstaked() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+
+        vm.expectRevert("Unstake first");
+        artStakingContract.withdraw(0);
+    }
+
+    function test_should_revert_when_withdrawing_already_withdrawn() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        artStakingContract.unstake(0);
+
+        // Fast forward past cooldown period
+        vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
+        artStakingContract.withdraw(0);
+
+        vm.expectRevert("Already withdrawn");
+        artStakingContract.withdraw(0);
+    }
+
+    function test_should_update_withdrawn_flag_when_withdrawing() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+
+        // Verify stake info before unstaking
+        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes.length, 1);
+        assertEq(stakes[0].stakeId, 0);
+        assertEq(stakes[0].withdrawn, false);
+
+        artStakingContract.unstake(0);
+
+        // Verify stake info after unstaking
+        stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes[0].unstakeTimestamp, block.timestamp);
+        assertEq(stakes[0].withdrawn, false);
+
+        // Fast forward past cooldown period
+        vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
+        artStakingContract.withdraw(0);
+
+        // Verify stake info after withdrawing
+        stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes[0].withdrawn, true);
+    }
+
+    function test_should_emit_withdrawn_event() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        artStakingContract.unstake(0);
+
+        // Fast forward past cooldown period
+        vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
+
+        vm.expectEmit(true, true, false, false);
+        emit Withdrawn(user1, 0);
+        artStakingContract.withdraw(0);
+    }
+
+    function test_should_transfer_tokens_on_withdraw() external {
+        _mintArtToken(user1, stakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount);
+        artStakingContract.stake(stakeAmount);
+        artStakingContract.unstake(0);
+
+        // Fast forward past cooldown period
+        vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
+        artStakingContract.withdraw(0);
+
+        assertEq(artTokenMock.balanceOf(user1), stakeAmount);
+        assertEq(artTokenMock.balanceOf(address(artStakingContract)), 0);
+    }
+
+    function test_should_handle_multiple_stakes() external {
+        uint256 secondStakeAmount = 500 * 10 ** 18;
+        _mintArtToken(user1, stakeAmount + secondStakeAmount);
+
+        vm.startPrank(user1);
+        _approveArtToken(address(artStakingContract), stakeAmount + secondStakeAmount);
         
-        uint256 stakingContractBalance = artTokenMock.balanceOf(address(artStakingContract));
-        _setClaimableSupply(stakingContractBalance + expectedReward);
-
-        vm.startPrank(claimer1);
-        artStakingContract.unstake(1);
-        vm.stopPrank();
-
-        // Ensure the reward is updated in the staker details
-        ArtStaking.StakerDetails memory stakerDetails = artStakingContract.getStakeDetails(claimer1, 1);
-        assertEq(stakerDetails.reward, expectedReward, "Reward not updated in staker details");
-    }
-
-    function test_should_update_rewards_when_six_month_stake_is_unstaked() external {
-        _mintArtToken(claimer1, stakeAmount);
-        _setStakingContractAddress(address(artStakingContract));
-
-        (, bytes32[] memory merkleProof) = _claimerDetails();
-
-        vm.startPrank(claimer1);
-        _approveArtToken(address(artStakingContract), stakeAmount);
-        artStakingContract.claimAndStake(claimer1, stakeAmount, sixMonths, merkleProof);
-        vm.stopPrank();
-
-        uint256 stakedAt = artStakingContract.getStakeDetails(claimer1, 1).stakedAt;
-        vm.warp(stakedAt + sixMonths);
-
-        uint256 expectedReward = artStakingContract.calculateArtReward(stakeAmount, sixMonths);
-
-        // Need to mint both the original stake amount AND the reward amount to the contract
-        _mintArtToken(address(artStakingContract), stakeAmount + expectedReward);
+        // Create first stake
+        artStakingContract.stake(stakeAmount);
         
-        uint256 stakingContractBalance = artTokenMock.balanceOf(address(artStakingContract));
-        _setClaimableSupply(stakingContractBalance + expectedReward);
-
-        vm.startPrank(claimer1);
-        artStakingContract.unstake(1);
-        vm.stopPrank();
-
-        ArtStaking.StakerDetails memory stakerDetails = artStakingContract.getStakeDetails(claimer1, 1);
-        assertEq(stakerDetails.reward, expectedReward, "Reward not updated in staker details");
-    }
-
-    function test_should_unstake_6_month_tge_stake_successfully() external {
-        _mintArtToken(user1, stakeAmount);
-
-        uint256 reward = artStakingContract.calculateArtReward(stakeAmount, artStakingContract.SIX_MONTHS());
-
-        // Ensure the reward is minted to the contract
-        _mintArtToken(address(artStakingContract), reward);
-
-        vm.startPrank(user1);
-        _approveArtToken(address(artStakingContract), stakeAmount);
-
-        artStakingContract.stake(user1, stakeAmount, artStakingContract.SIX_MONTHS());
-
-        ArtStaking.StakerDetails memory stakerDetails = artStakingContract.getStakeDetails(user1, 1);
-
-        vm.warp(block.timestamp + stakerDetails.stakingDuration);
-
-        artStakingContract.unstake(stakerDetails.id);
-
-        // staker details
-        stakerDetails = artStakingContract.getStakeDetails(user1, 1);
-        assertEq(stakerDetails.unstaked, true);
-    }
-
-    function test_should_unstake_3_month_tge_stake_successfully() external {
-        _mintArtToken(user1, stakeAmount);
-
-        uint256 reward = artStakingContract.calculateArtReward(stakeAmount, artStakingContract.THREE_MONTHS());
-
-        _mintArtToken(address(artStakingContract), reward);
-
-        vm.startPrank(user1);
-        _approveArtToken(address(artStakingContract), stakeAmount);
-
-        artStakingContract.stake(user1, stakeAmount, artStakingContract.THREE_MONTHS());
-
-        ArtStaking.StakerDetails memory stakerDetails = artStakingContract.getStakeDetails(user1, 1);
-
-        vm.warp(block.timestamp + stakerDetails.stakingDuration);
-
-        artStakingContract.unstake(stakerDetails.id);
-
-        // staker details
-        stakerDetails = artStakingContract.getStakeDetails(user1, 1);
-        assertEq(stakerDetails.unstaked, true);
+        // Verify first stake
+        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes.length, 1);
+        assertEq(stakes[0].stakeId, 0);
+        assertEq(stakes[0].amount, stakeAmount);
+        
+        // Create second stake
+        artStakingContract.stake(secondStakeAmount);
+        
+        // Verify both stakes
+        stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes.length, 2);
+        assertEq(stakes[0].stakeId, 0);
+        assertEq(stakes[0].amount, stakeAmount);
+        assertEq(stakes[1].stakeId, 1);
+        assertEq(stakes[1].amount, secondStakeAmount);
+        
+        // Unstake first stake
+        artStakingContract.unstake(0);
+        
+        // Verify unstake status
+        stakes = artStakingContract.getAllStakes(user1);
+        assertEq(stakes[0].unstakeTimestamp, block.timestamp);
+        assertEq(stakes[0].releaseTimestamp, block.timestamp + artStakingContract.cooldownPeriod());
+        assertEq(stakes[1].unstakeTimestamp, 0); // Second stake should not be affected
     }
 }

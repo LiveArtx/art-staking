@@ -132,7 +132,7 @@ $ cast --help
 ### Option 1: Using .env File
 Create a `.env` file in the root directory:
 ```env
-ALCHEMY_URL=https://base-mainnet.g.alchemy.com/v2/your-api-key
+RPC_URL=https://base-mainnet.g.alchemy.com/v2/your-api-key
 PRIVATE_KEY=your-private-key
 ETHERSCAN_API_KEY=your-etherscan-key
 ```
@@ -142,12 +142,12 @@ If you encounter issues with the .env file not being read properly, export the v
 
 ```bash
 # For Linux/MacOS
-export ALCHEMY_URL="https://base-mainnet.g.alchemy.com/v2/your-api-key"
+export RPC_URL="https://base-mainnet.g.alchemy.com/v2/your-api-key"
 export PRIVATE_KEY="your-private-key"
 export ETHERSCAN_API_KEY="your-etherscan-key"
 
 # For Windows (PowerShell)
-$env:ALCHEMY_URL="https://base-mainnet.g.alchemy.com/v2/your-api-key"
+$env:RPC_URL="https://base-mainnet.g.alchemy.com/v2/your-api-key"
 $env:PRIVATE_KEY="your-private-key"
 $env:ETHERSCAN_API_KEY="your-etherscan-key"
 ```
@@ -157,10 +157,10 @@ You can verify your environment variables are set correctly:
 
 ```bash
 # Linux/MacOS
-echo $ALCHEMY_URL
+echo $RPC_URL
 
 # Windows (PowerShell)
-echo $env:ALCHEMY_URL
+echo $env:RPC_URL
 ```
 
 ### Common Issues

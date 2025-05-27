@@ -22,7 +22,7 @@ abstract contract ContractUnderTest is Test {
 
     function setUp() public virtual {
         // Mainnet fork
-        string memory mainnet_rpc_url_key = "ALCHEMY_URL";
+        string memory mainnet_rpc_url_key = "RPC_URL";
         string memory mainnet_rpc_url = vm.envString(mainnet_rpc_url_key);
         mainnetFork = vm.createFork(mainnet_rpc_url);
 
@@ -46,16 +46,7 @@ abstract contract ContractUnderTest is Test {
         vm.startPrank(deployer);
 
         address _artTokenAddress = address(artTokenMock);
-        uint256 _stakingEnabledAt = block.timestamp;
-        uint256 _threeMonthRewardMultiplier = 0.2 * 1e18;
-        uint256 _sixMonthRewardMultiplier = 0.5 * 1e18;
-
-        artStakingContract.initialize(
-            _artTokenAddress, 
-            _stakingEnabledAt, 
-            _threeMonthRewardMultiplier,
-            _sixMonthRewardMultiplier
-        );
+        artStakingContract.initialize(_artTokenAddress);
 
         _setClaimableSupply(CLAIM_AMOUNT * 3);
         _setArtTokenVestingStartTime(block.timestamp - 1);
@@ -119,33 +110,21 @@ abstract contract ContractUnderTest is Test {
         vm.stopPrank();
     }
 
-    function _setArtTokenAddress(address _addr) internal {
-        vm.startPrank(deployer);
-        artStakingContract.setArtTokenAddress(_addr);
-        vm.stopPrank();
-    }
-
-    function _setStakingEnabledAt(uint256 _time) public {
-        vm.startPrank(deployer);
-        artStakingContract.setStakingEnabledAt(_time);
-        vm.stopPrank();
-    }
-
     function _setArtTokenVestingStartTime(uint256 _time) internal {
         vm.startPrank(deployer);
         artTokenMock.setVestingStartTime(_time);
         vm.stopPrank();
     }
 
-    function _setRewardMultipliers(uint256 _threeMonthRewardMultiplier, uint256 _sixMonthRewardMultiplier) internal {
-        vm.startPrank(deployer);
-        artStakingContract.setRewardMultipliers(_threeMonthRewardMultiplier, _sixMonthRewardMultiplier);
-        vm.stopPrank();
-    }
-
     function _getArtTokenVestingStartTime() internal returns(uint256) {
         vm.startPrank(deployer);
         return artTokenMock.vestingStart();
+    }
+
+    function _setCooldownPeriod(uint256 _cooldownPeriod) internal {
+        vm.startPrank(deployer);
+        artStakingContract.setCooldownPeriod(_cooldownPeriod);
+        vm.stopPrank();
     }
 }
 
