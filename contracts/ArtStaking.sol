@@ -26,6 +26,7 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
     event Staked(address indexed user, uint256 indexed stakeId, uint256 amount);
     event Unstaked(address indexed user, uint256 indexed stakeId);
     event Withdrawn(address indexed user, uint256 indexed stakeId);
+    event EmergencyWithdrawn(address indexed user, uint256 indexed stakeId);
 
     function initialize(address _token) public initializer {
         require(_token != address(0), "Invalid art token address");
@@ -33,7 +34,7 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
         __Pausable_init();
 
         token = IERC20(_token);
-        cooldownPeriod = 7 days; // Set initial cooldown period
+        cooldownPeriod = 7 days;
     }
 
     /**
@@ -79,8 +80,8 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
     function unstake(uint256 index) external whenNotPaused {
         require(index < _stakes[_msgSender()].length, "Stake does not exist");
         StakeInfo storage info = _stakes[_msgSender()][index];
-        require(info.unstakeTimestamp == 0, "Already unstaking");
         require(!info.withdrawn, "Already withdrawn");
+        require(info.unstakeTimestamp == 0, "Already unstaking");
 
         info.unstakeTimestamp = block.timestamp;
         info.releaseTimestamp = block.timestamp + cooldownPeriod;
@@ -107,6 +108,22 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
     }
 
     /**
+     * @notice Emergency withdraw function that allows users to withdraw their tokens when paused
+     * @dev Only callable when contract is paused
+     * @param index The index of the stake to withdraw
+     */
+    function emergencyWithdraw(uint256 index) external whenPaused {
+        require(index < _stakes[_msgSender()].length, "Stake does not exist");
+        StakeInfo storage info = _stakes[_msgSender()][index];
+        require(!info.withdrawn, "Already withdrawn");
+
+        info.withdrawn = true;
+        token.transfer(_msgSender(), info.amount);
+
+        emit EmergencyWithdrawn(_msgSender(), info.stakeId);
+    }
+
+    /**
      * @notice Returns the number of stakes for a user
      * @param user The address of the user
      * @return The number of stakes
@@ -122,6 +139,7 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
      * @return The stake info
      */
     function getStakeInfo(address user, uint256 index) external view returns (StakeInfo memory) {
+        require(index < _stakes[user].length, "Stake does not exist");
         return _stakes[user][index];
     }
 
@@ -132,6 +150,22 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
      */
     function getAllStakes(address user) external view returns (StakeInfo[] memory) {
         return _stakes[user];
+    }
+
+    /**
+     * @notice Returns the total amount staked by a user
+     * @param user The address of the user
+     * @return The total amount staked
+     */
+    function getTotalStaked(address user) external view returns (uint256) {
+        uint256 total = 0;
+        StakeInfo[] memory stakes = _stakes[user];
+        for (uint256 i = 0; i < stakes.length; i++) {
+            if (!stakes[i].withdrawn) {
+                total += stakes[i].amount;
+            }
+        }
+        return total;
     }
 
     /**
