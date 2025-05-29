@@ -28,9 +28,9 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
     event Withdrawn(address indexed user, uint256 indexed stakeId);
     event EmergencyWithdrawn(address indexed user, uint256 indexed stakeId);
 
-    function initialize(address _token) public initializer {
+    function initialize(address _token, address _owner) public initializer {
         require(_token != address(0), "Invalid art token address");
-        __Ownable_init(_msgSender());
+        __Ownable_init(_owner);
         __Pausable_init();
 
         token = IERC20(_token);
