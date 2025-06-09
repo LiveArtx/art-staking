@@ -22,7 +22,7 @@ contract ArtStakingScript is Script {
         address initialOwner = derivedAddress;
 
         // ArtStaking initialization parameters
-        address artTokenAddress = 0x4aEfE8964D998061bFAf1063538FefE7dd195557; // OFT testnet
+        address artTokenAddress = 0xcE1BeFb348B6D9C190aAe8C875925987c0e20EDD; // OFT testnet
 
         vm.startBroadcast(privateKey);
 
@@ -33,7 +33,7 @@ contract ArtStakingScript is Script {
             initialOwner,
             abi.encodeCall(
                 ArtStaking.initialize,
-                (artTokenAddress)
+                (artTokenAddress, initialOwner)
             ),
             opts
         );

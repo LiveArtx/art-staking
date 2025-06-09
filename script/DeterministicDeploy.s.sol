@@ -75,7 +75,7 @@ contract DeployContractScript is Script {
     // Contract configuration
     string public constant CONTRACT_NAME = "ArtStaking";
     address public constant ART_TOKEN_ADDRESS =
-        0x3Ab62B2915C7beA000FEB1a35113acD63F813662;
+        0xcE1BeFb348B6D9C190aAe8C875925987c0e20EDD;
 
     // Computed values
     function CREATE2_FACTORY_ADDRESS() public view returns (address) {
