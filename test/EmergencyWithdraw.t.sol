@@ -21,21 +21,16 @@ contract ArtToken_Staking_EmergencyWithdraw is ContractUnderTest {
         vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
         artStakingContract.stake(stakeAmount);
-
-        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(
-            user1
-        );
-        uint256 stakeIndex = stakes.length - 1;
-        artStakingContract.unstake(stakeIndex);
+        artStakingContract.unstake(0); // stakeId 0
 
         vm.expectRevert(abi.encodeWithSignature("ExpectedPause()"));
-        artStakingContract.emergencyWithdraw(stakeIndex);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
     }
 
     function test_should_revert_when_stake_does_not_exist() external {
         _pause();
-        vm.expectRevert("Stake does not exist");
-        artStakingContract.emergencyWithdraw(0);
+        vm.expectRevert("Stake not found");
+        artStakingContract.emergencyWithdraw(999); // Non-existent stakeId
     }
 
     function test_should_revert_when_already_withdrawn() external {
@@ -44,23 +39,17 @@ contract ArtToken_Staking_EmergencyWithdraw is ContractUnderTest {
         vm.startPrank(user1);
         _approveArtToken(address(artStakingContract), stakeAmount);
         artStakingContract.stake(stakeAmount);
-
-        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(
-            user1
-        );
-        uint256 stakeIndex = stakes.length - 1;
-
-        artStakingContract.unstake(stakeIndex);
+        artStakingContract.unstake(0); // stakeId 0
 
         // Fast forward past cooldown period
         vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
-        artStakingContract.withdraw(stakeIndex);
+        artStakingContract.withdraw(0); // stakeId 0
 
         _pause();
 
         vm.startPrank(user1);
         vm.expectRevert("Already withdrawn");
-        artStakingContract.emergencyWithdraw(stakeIndex);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
     }
 
     function test_should_withdraw_tokens_when_paused() external {
@@ -74,11 +63,7 @@ contract ArtToken_Staking_EmergencyWithdraw is ContractUnderTest {
         _pause();
 
         vm.startPrank(user1);
-        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(
-            user1
-        );
-        uint256 stakeIndex = stakes.length - 1;
-        artStakingContract.emergencyWithdraw(stakeIndex);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
 
         assertEq(artTokenMock.balanceOf(user1), stakeAmount);
         assertEq(artTokenMock.balanceOf(address(artStakingContract)), 0);
@@ -103,7 +88,7 @@ contract ArtToken_Staking_EmergencyWithdraw is ContractUnderTest {
         );
         assertEq(stakes[0].withdrawn, false);
 
-        artStakingContract.emergencyWithdraw(0);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
 
         // Verify stake info after emergency withdraw
         stakes = artStakingContract.getAllStakes(user1);
@@ -121,13 +106,9 @@ contract ArtToken_Staking_EmergencyWithdraw is ContractUnderTest {
         _pause();
 
         vm.startPrank(user1);
-        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(
-            user1
-        );
-        uint256 stakeIndex = stakes.length - 1;
         vm.expectEmit(true, true, false, false);
-        emit EmergencyWithdrawn(user1, stakeIndex);
-        artStakingContract.emergencyWithdraw(stakeIndex);
+        emit EmergencyWithdrawn(user1, 0);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
     }
 
     function test_should_allow_emergency_withdraw_without_unstaking() external {
@@ -141,11 +122,7 @@ contract ArtToken_Staking_EmergencyWithdraw is ContractUnderTest {
         _pause();
 
         vm.startPrank(user1);
-        ArtStaking.StakeInfo[] memory stakes = artStakingContract.getAllStakes(
-            user1
-        );
-        uint256 stakeIndex = stakes.length - 1;
-        artStakingContract.emergencyWithdraw(stakeIndex);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
 
         assertEq(artTokenMock.balanceOf(user1), stakeAmount);
         assertEq(artTokenMock.balanceOf(address(artStakingContract)), 0);

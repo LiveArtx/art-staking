@@ -38,7 +38,7 @@ abstract contract ContractUnderTest is Test {
 
     function _initializeArtStakingContract() internal {
         vm.startPrank(deployer);
-        artStakingContract.initialize(address(artTokenMock));
+        artStakingContract.initialize(address(artTokenMock), deployer);
         vm.stopPrank();
     }
 

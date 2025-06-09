@@ -75,52 +75,79 @@ contract ArtStaking is Initializable, OwnableUpgradeable, PausableUpgradeable {
     /**
      * @notice Unstakes tokens
      * @dev Only callable when not paused
-     * @param index The index of the stake to unstake
+     * @param stakeId The ID of the stake to unstake
      */
-    function unstake(uint256 index) external whenNotPaused {
-        require(index < _stakes[_msgSender()].length, "Stake does not exist");
-        StakeInfo storage info = _stakes[_msgSender()][index];
-        require(!info.withdrawn, "Already withdrawn");
-        require(info.unstakeTimestamp == 0, "Already unstaking");
-
-        info.unstakeTimestamp = block.timestamp;
-        info.releaseTimestamp = block.timestamp + cooldownPeriod;
-
-        emit Unstaked(_msgSender(), info.stakeId);
+    function unstake(uint256 stakeId) external whenNotPaused {
+        StakeInfo[] storage userStakes = _stakes[_msgSender()];
+        bool found = false;
+        
+        for (uint256 i = 0; i < userStakes.length; i++) {
+            if (userStakes[i].stakeId == stakeId) {
+                require(!userStakes[i].withdrawn, "Already withdrawn");
+                require(userStakes[i].unstakeTimestamp == 0, "Already unstaking");
+                
+                userStakes[i].unstakeTimestamp = block.timestamp;
+                userStakes[i].releaseTimestamp = block.timestamp + cooldownPeriod;
+                
+                emit Unstaked(_msgSender(), stakeId);
+                found = true;
+                break;
+            }
+        }
+        
+        require(found, "Stake not found");
     }
 
     /**
      * @notice Withdraws tokens after cooldown period
      * @dev Only callable when not paused
-     * @param index The index of the stake to withdraw
+     * @param stakeId The ID of the stake to withdraw
      */
-    function withdraw(uint256 index) external whenNotPaused {
-        require(index < _stakes[_msgSender()].length, "Stake does not exist");
-        StakeInfo storage info = _stakes[_msgSender()][index];
-        require(info.unstakeTimestamp != 0, "Unstake first");
-        require(block.timestamp >= info.releaseTimestamp, "Cooldown not complete");
-        require(!info.withdrawn, "Already withdrawn");
-
-        info.withdrawn = true;
-        token.transfer(_msgSender(), info.amount);
-
-        emit Withdrawn(_msgSender(), info.stakeId);
+    function withdraw(uint256 stakeId) external whenNotPaused {
+        StakeInfo[] storage userStakes = _stakes[_msgSender()];
+        bool found = false;
+        
+        for (uint256 i = 0; i < userStakes.length; i++) {
+            if (userStakes[i].stakeId == stakeId) {
+                require(userStakes[i].unstakeTimestamp != 0, "Unstake first");
+                require(block.timestamp >= userStakes[i].releaseTimestamp, "Cooldown not complete");
+                require(!userStakes[i].withdrawn, "Already withdrawn");
+                
+                userStakes[i].withdrawn = true;
+                token.transfer(_msgSender(), userStakes[i].amount);
+                
+                emit Withdrawn(_msgSender(), stakeId);
+                found = true;
+                break;
+            }
+        }
+        
+        require(found, "Stake not found");
     }
 
     /**
      * @notice Emergency withdraw function that allows users to withdraw their tokens when paused
      * @dev Only callable when contract is paused
-     * @param index The index of the stake to withdraw
+     * @param stakeId The ID of the stake to withdraw
      */
-    function emergencyWithdraw(uint256 index) external whenPaused {
-        require(index < _stakes[_msgSender()].length, "Stake does not exist");
-        StakeInfo storage info = _stakes[_msgSender()][index];
-        require(!info.withdrawn, "Already withdrawn");
-
-        info.withdrawn = true;
-        token.transfer(_msgSender(), info.amount);
-
-        emit EmergencyWithdrawn(_msgSender(), info.stakeId);
+    function emergencyWithdraw(uint256 stakeId) external whenPaused {
+        StakeInfo[] storage userStakes = _stakes[_msgSender()];
+        bool found = false;
+        
+        for (uint256 i = 0; i < userStakes.length; i++) {
+            if (userStakes[i].stakeId == stakeId) {
+                require(!userStakes[i].withdrawn, "Already withdrawn");
+                
+                userStakes[i].withdrawn = true;
+                token.transfer(_msgSender(), userStakes[i].amount);
+                
+                emit EmergencyWithdrawn(_msgSender(), stakeId);
+                found = true;
+                break;
+            }
+        }
+        
+        require(found, "Stake not found");
     }
 
     /**

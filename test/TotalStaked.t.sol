@@ -50,9 +50,9 @@ contract ArtToken_Staking_TotalStaked is ContractUnderTest {
         artStakingContract.stake(secondStakeAmount);
 
         // Unstake and withdraw first stake
-        artStakingContract.unstake(0);
+        artStakingContract.unstake(0); // stakeId 0
         vm.warp(block.timestamp + artStakingContract.cooldownPeriod() + 1);
-        artStakingContract.withdraw(0);
+        artStakingContract.withdraw(0); // stakeId 0
 
         // Total should only include the second stake
         assertEq(artStakingContract.getTotalStaked(user1), secondStakeAmount);
@@ -71,7 +71,7 @@ contract ArtToken_Staking_TotalStaked is ContractUnderTest {
         _pause();
 
         vm.startPrank(user1);
-        artStakingContract.emergencyWithdraw(0);
+        artStakingContract.emergencyWithdraw(0); // stakeId 0
 
         // Total should only include the second stake
         assertEq(artStakingContract.getTotalStaked(user1), secondStakeAmount);
@@ -87,7 +87,7 @@ contract ArtToken_Staking_TotalStaked is ContractUnderTest {
         artStakingContract.stake(secondStakeAmount);
 
         // Unstake first stake but don't withdraw
-        artStakingContract.unstake(0);
+        artStakingContract.unstake(0); // stakeId 0
 
         // Total should include both stakes since neither is withdrawn
         assertEq(artStakingContract.getTotalStaked(user1), stakeAmount + secondStakeAmount);

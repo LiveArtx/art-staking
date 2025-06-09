@@ -35,8 +35,8 @@ contract ArtToken_Staking_Withdraw is ContractUnderTest {
     }
 
     function test_should_revert_when_stake_does_not_exist() external {
-        vm.expectRevert("Stake does not exist");
-        artStakingContract.withdraw(0);
+        vm.expectRevert("Stake not found");
+        artStakingContract.withdraw(999);
     }
 
     function test_should_revert_when_withdrawing_before_cooldown() external {

@@ -58,7 +58,7 @@ contract ArtToken_Staking_CooldownPeriod is ContractUnderTest {
 
         // Unstake and verify the new cooldown period is applied
         vm.startPrank(user1);
-        artStakingContract.unstake(0);
+        artStakingContract.unstake(0); // stakeId 0
         
         ArtStaking.StakeInfo memory stakeInfo = artStakingContract.getStakeInfo(user1, 0);
         assertEq(stakeInfo.releaseTimestamp, stakeInfo.unstakeTimestamp + newCooldownPeriod);

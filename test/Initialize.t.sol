@@ -32,13 +32,13 @@ contract ArtToken_Staking_Initialize is ContractUnderTest {
     function test_should_revert_when_artTokenAddress_is_zero() external {
         vm.expectRevert("Invalid art token address");
 
-        artStakingContract.initialize(address(0));
+        artStakingContract.initialize(address(0), deployer);
     }
 
     function test_when_already_initialized() external {
         _initializeArtStakingContract();
         vm.expectRevert(abi.encodeWithSelector(Initializable.InvalidInitialization.selector));
 
-        artStakingContract.initialize(address(artStakingContract));
+        artStakingContract.initialize(address(artStakingContract), deployer);
     }
 }
