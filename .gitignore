@@ -16,3 +16,5 @@ docs/
 # Coverage
 coverage
 lcov.info
+
+node_modules/
