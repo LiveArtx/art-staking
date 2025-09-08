@@ -34,7 +34,7 @@ contract DeployArtStakingScript is Script {
 
     // Constants for deployment configuration
     address public constant ART_TOKEN_ADDRESS = 0x4DEC3139f4A6c638E26452d32181fe87A7530805; // Replace with actual address
-    uint256 public constant STAKING_ENABLED_AT = 1756295142; // Replace with actual timestamp
+    uint256 public constant STAKING_ENABLED_AT = 1757419200; // Replace with actual timestamp
     uint256 public constant THREE_MONTH_REWARD_MULTIPLIER = 0.2e18; // 20% reward for 3-month stakes
     uint256 public constant SIX_MONTH_REWARD_MULTIPLIER = 0.5e18; // 50% reward for 6-month stakes
     bool public constant USE_DETERMINISTIC_DEPLOYMENT = true;
@@ -50,7 +50,7 @@ contract DeployArtStakingScript is Script {
         // Deploy ArtStaking implementation
         console.log("Deploying ArtStaking implementation...");
         if (useDeterministicDeployment) {
-            bytes32 salt = keccak256(abi.encodePacked("ArtStaking--Implementation"));
+            bytes32 salt = keccak256(abi.encodePacked("ArtStaking---Implementation"));
             artStakingImplementation = new ArtStaking{salt: salt}();
             console.log("ArtStaking implementation deployed deterministically at:", address(artStakingImplementation));
         } else {
@@ -61,7 +61,7 @@ contract DeployArtStakingScript is Script {
         // Deploy ProxyAdmin
         console.log("Deploying ProxyAdmin...");
         if (useDeterministicDeployment) {
-            bytes32 salt = keccak256(abi.encodePacked("ArtStaking--ProxyAdmin"));
+            bytes32 salt = keccak256(abi.encodePacked("ArtStaking---ProxyAdmin"));
             proxyAdmin = new ProxyAdmin{salt: salt}(owner);
             console.log("ProxyAdmin deployed deterministically at:", address(proxyAdmin));
         } else {
@@ -81,7 +81,7 @@ contract DeployArtStakingScript is Script {
 
         ERC1967Proxy proxy;
         if (useDeterministicDeployment) {
-            bytes32 salt = keccak256(abi.encodePacked("ArtStaking--Proxy"));
+            bytes32 salt = keccak256(abi.encodePacked("ArtStaking---Proxy"));
             proxy = new ERC1967Proxy{salt: salt}(address(artStakingImplementation), initData);
             console.log("ArtStaking proxy deployed deterministically at:", address(proxy));
         } else {
